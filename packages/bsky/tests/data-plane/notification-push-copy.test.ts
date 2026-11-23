@@ -331,7 +331,7 @@ describe('composePushCopy', () => {
 
   it('returns generic copy for unknown reasons', () => {
     expect(composePushCopy(row({ reason: 'bogus' }), ctx())).toEqual({
-      title: 'Blacksky',
+      title: 'mu',
       message: 'You have a new notification',
     })
   })
