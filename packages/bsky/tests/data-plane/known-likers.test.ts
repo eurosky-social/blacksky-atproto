@@ -75,7 +75,10 @@ describe('data plane known likers', () => {
     ])
   })
 
-  it('only considers the 500 most recent likes', async () => {
+  // Eurosky: the dataplane-known-likers-follow-first patch starts from the
+  // viewer's follows, so a followed liker older than the 500 most recent
+  // likes counts too (tests/eurosky/known-likers.test.ts).
+  it('also counts followed likers older than the 500 most recent likes', async () => {
     const { results } = await network.bsky.ctx.dataplane.getKnownLikers({
       actorDid: viewer,
       subjectUris: [cutoffSubject],
@@ -83,7 +86,7 @@ describe('data plane known likers', () => {
     })
 
     expect(results).toEqual([
-      { subjectUri: cutoffSubject, count: 1, dids: [newKnown] },
+      { subjectUri: cutoffSubject, count: 2, dids: [newKnown, oldKnown] },
     ])
   })
 
