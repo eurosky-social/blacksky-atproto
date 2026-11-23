@@ -10,6 +10,11 @@ import type { Service } from '../../../proto/bsky_connect.js'
 import type { Database } from '../db/index.js'
 import { TimeCidKeyset, paginate } from '../db/pagination.js'
 
+// Eurosky: how many of the viewer's newest follows getKnownLikers checks. Its
+// cost grows with the follows checked, so this bounds it for accounts that
+// follow tens of thousands; an older follow's like then goes uncounted.
+const KNOWN_LIKERS_MAX_FOLLOWS = 5000
+
 export default (db: Database): Partial<ServiceImpl<typeof Service>> => ({
   async getKnownLikers(req) {
     const { actorDid, subjectUris, limit } = req
@@ -20,45 +25,60 @@ export default (db: Database): Partial<ServiceImpl<typeof Service>> => ({
     }))
     if (limit <= 0 || subjectUris.length === 0) return { results }
 
+    // Eurosky (dataplane-known-likers-follow-first): upstream keeps the
+    // viewer's follows among each subject's 500 newest likes, which is only
+    // fast with like_subject_sort_at_creator_idx. juice doesn't build that
+    // index (dataplane-like-index-by-hand), and without it Postgres reads
+    // every like of a subject to find the newest 500. Instead, ask
+    // like_unique_subject (subject, creator) for any of the subjects liked by
+    // any of the viewer's newest follows, in one pass. count is every followed
+    // liker, not only those among the 500 newest likes.
     const { rows } = await sql<{
-      ordinal: string
+      subject: string
       creator: string
       count: number
     }>`
-      with "rankedKnownLikers" as (
+      with "knownLikes" as (
+        select "like".subject, "like".creator, "like"."sortAt"
+        from "like"
+        where "like".subject = any(${subjectUris}::varchar[])
+          and "like".creator = any(array(
+            select follow."subjectDid"
+            from follow
+            where follow.creator = ${actorDid}
+            order by follow."sortAt" desc
+            limit ${KNOWN_LIKERS_MAX_FOLLOWS}
+          ))
+          and "like".space_uri is null
+      ),
+      "rankedKnownLikers" as (
         select
-          subjects.ordinal,
-          "recentLikes".creator,
-          count(*) over (partition by subjects.ordinal)::int as count,
+          subject,
+          creator,
+          count(*) over (partition by subject)::int as count,
           row_number() over (
-            partition by subjects.ordinal
-            order by "recentLikes"."sortAt" desc
+            partition by subject
+            order by "sortAt" desc
           ) as rank
-        from unnest(${subjectUris}::varchar[]) with ordinality
-          as subjects("subjectUri", ordinal)
-        cross join lateral (
-          select "like".creator, "like"."sortAt"
-          from "like"
-          where "like".subject = subjects."subjectUri"
-            and "like".space_uri is null
-          order by "like"."sortAt" desc
-          limit 500
-        ) as "recentLikes"
-        inner join follow on
-          follow."subjectDid" = "recentLikes".creator
-          and follow.creator = ${actorDid}
+        from "knownLikes"
       )
-      select ordinal, creator, count
+      select subject, creator, count
       from "rankedKnownLikers"
       where rank <= ${limit}
-      order by ordinal, rank
+      order by subject, rank
     `.execute(db.db)
 
+    const bySubject = new Map<string, { count: number; dids: string[] }>()
     for (const row of rows) {
-      const result = results[Number(row.ordinal) - 1]
-      assert(result)
-      result.count = row.count
-      result.dids.push(row.creator)
+      const known = bySubject.get(row.subject) ?? { count: row.count, dids: [] }
+      known.dids.push(row.creator)
+      bySubject.set(row.subject, known)
+    }
+    for (const result of results) {
+      const known = bySubject.get(result.subjectUri)
+      if (!known) continue
+      result.count = known.count
+      result.dids.push(...known.dids)
     }
     return { results }
   },
