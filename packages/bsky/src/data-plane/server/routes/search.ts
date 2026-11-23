@@ -1,4 +1,5 @@
 import type { ServiceImpl } from '@connectrpc/connect'
+import { type SqlBool, sql } from 'kysely'
 import type { Service } from '../../../proto/bsky_connect.js'
 import type { Database } from '../db/index.js'
 import {
@@ -62,7 +63,9 @@ export default (db: Database): Partial<ServiceImpl<typeof Service>> => {
     const { ref } = db.db.dynamic
     let builder = db.db
       .selectFrom('actor')
-      .where('actor.handle', 'like', `%${cleanQuery(term)}%`)
+      .where(
+        sql<SqlBool>`lower("actor"."handle") like ${`%${cleanQuery(term).toLowerCase()}%`}`,
+      )
       .selectAll()
 
     const keyset = new IndexedAtDidKeyset(
