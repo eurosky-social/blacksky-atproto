@@ -1,7 +1,19 @@
+import { Code, ConnectError } from '@connectrpc/connect'
 import { type SqlBool, sql } from 'kysely'
 import { ensureValidRecordKey } from '@atproto/syntax'
-import { InvalidRequestError } from '@atproto/xrpc-server'
 import type { AnyQb, DbRef } from './util.js'
+
+// A cursor the dataplane cannot read is the caller's mistake, typically one
+// minted by another AppView. Thrown as an xrpc InvalidRequestError it reached
+// the AppView as a Connect "internal" error and the client got a 500;
+// InvalidArgument is answered with a 400 (errorParser in src/index.ts).
+const malformedCursor = () =>
+  new ConnectError('Malformed cursor', Code.InvalidArgument)
+
+// Bluesky's AppView pages feeds and likes with a bare ISO time, the sortAt of
+// the last item it returned (`2026-11-10T21:48:12.237Z`).
+const ISO_TIME_CURSOR =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 
 type KeysetCursor = { primary: string; secondary: string }
 type KeysetLabeledResult = {
@@ -68,7 +80,7 @@ export abstract class GenericKeyset<R, LR extends KeysetLabeledResult> {
     const result = cursorStr.split('__')
     const [primary, secondary, ...others] = result
     if (!primary || !secondary || others.length > 0) {
-      throw new InvalidRequestError('Malformed cursor')
+      throw malformedCursor()
     }
     return {
       primary,
@@ -166,10 +178,26 @@ export class TimeCidKeyset<
       secondary: labeled.secondary,
     }
   }
+  /**
+   * Also reads Bluesky's bare ISO time cursor, as "older than this time", so
+   * a client that switches AppViews mid-scroll keeps paging instead of
+   * failing. The empty secondary sorts below every cid, so the keyset
+   * condition (primary, secondary) < (time, '') is primary < time: the
+   * continuation of Bluesky's page, give or take items whose sortAt differs
+   * between the two AppViews by a few milliseconds.
+   */
+  unpackCursor(cursorStr?: string): KeysetCursor | undefined {
+    if (cursorStr && ISO_TIME_CURSOR.test(cursorStr)) {
+      const time = new Date(cursorStr).getTime()
+      if (isNaN(time)) throw malformedCursor()
+      return { primary: time.toString(), secondary: '' }
+    }
+    return super.unpackCursor(cursorStr)
+  }
   cursorToLabeledResult(cursor: KeysetCursor) {
     const primaryDate = new Date(parseInt(cursor.primary, 10))
     if (isNaN(primaryDate.getTime())) {
-      throw new InvalidRequestError('Malformed cursor')
+      throw malformedCursor()
     }
     return {
       primary: primaryDate.toISOString(),
@@ -271,7 +299,7 @@ export abstract class GenericSingleKey<R, LR extends SingleKeyLabeledResult> {
     const result = cursorStr.split('__')
     const [primary, ...others] = result
     if (!primary || others.length > 0) {
-      throw new InvalidRequestError('Malformed cursor')
+      throw malformedCursor()
     }
     return {
       primary,
@@ -329,7 +357,7 @@ export class IsoTimeKey<TimeResult = SortAtResult> extends GenericSingleKey<
   cursorToLabeledResult(cursor: SingleKeyCursor) {
     const primaryDate = new Date(cursor.primary)
     if (isNaN(primaryDate.getTime())) {
-      throw new InvalidRequestError('Malformed cursor')
+      throw malformedCursor()
     }
     return {
       primary: primaryDate.toISOString(),
@@ -376,7 +404,7 @@ export class RkeyKey<RkeyResult = KeyResult> extends GenericSingleKey<
         primary: cursor.primary,
       }
     } catch {
-      throw new InvalidRequestError('Malformed cursor')
+      throw malformedCursor()
     }
   }
 }
