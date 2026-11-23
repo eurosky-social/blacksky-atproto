@@ -54,9 +54,19 @@ export default (db: Database): Partial<ServiceImpl<typeof Service>> => ({
         .where('actor.did', 'in', dids)
         .selectAll('actor')
         .select([
+          // Eurosky (dataplane-labeler-self-only): only the `self` record
+          // counts, as in upstream's indexer. wintermute also stores labeler
+          // records under other keys, and an account with several made this
+          // subquery return more than one row, failing every request that
+          // showed the account (EUR-647).
           db.db
             .selectFrom('labeler')
             .whereRef('creator', '=', ref('actor.did'))
+            .where(
+              'uri',
+              '=',
+              sql<string>`'at://' || ${ref('actor.did')} || '/app.bsky.labeler.service/self'`,
+            )
             .select(sql<true>`${true}`.as('val'))
             .as('isLabeler'),
         ])
