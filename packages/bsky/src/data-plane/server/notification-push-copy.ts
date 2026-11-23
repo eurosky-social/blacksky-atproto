@@ -12,7 +12,7 @@ export type PushCopyContext = {
 export type PushCopy = { title: string; message: string }
 
 export const GENERIC_PUSH_COPY: PushCopy = {
-  title: 'Blacksky',
+  title: 'mu',
   message: 'You have a new notification',
 }
 
