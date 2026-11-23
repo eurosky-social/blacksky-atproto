@@ -1,7 +1,7 @@
 import { Code, ConnectError, type Interceptor } from '@connectrpc/connect'
 import * as ui8 from 'uint8arrays'
 import { getDidKeyFromMultibase } from '@atproto/identity'
-import { InvalidRequestError } from '@atproto/xrpc-server'
+import { InvalidRequestError, XRPCError } from '@atproto/xrpc-server'
 
 export const callerInterceptor =
   (caller: string): Interceptor =>
@@ -33,6 +33,17 @@ export const asInvalidRequest =
     }
     throw err
   }
+
+// The error parser of the AppView's XRPC server. An InvalidArgument from the
+// dataplane (or another Connect service) that a handler leaves uncaught is
+// the caller's bad input, such as a cursor minted by another AppView, so it is
+// answered with a 400 and the service's message instead of a 500.
+export const xrpcErrorParser = (err: unknown): XRPCError => {
+  if (isDataplaneError(err, Code.InvalidArgument)) {
+    return new InvalidRequestError(err.rawMessage, undefined, { cause: err })
+  }
+  return XRPCError.fromError(err)
+}
 
 export const unpackIdentityServices = (servicesBytes: Uint8Array) => {
   const servicesStr = ui8.toString(servicesBytes, 'utf8')

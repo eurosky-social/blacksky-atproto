@@ -16,15 +16,16 @@ Merge methods:
 
 The branch starts at Blacksky's `22656646941` (2026-11-18, merge of their #69). Until 2026-11-23 these changes lived in eurosky-infra as `.patch` files; the commit messages carry the full reasoning.
 
-| Commit                                                              | Why                                                                                                                            | Offer to Blacksky?                    |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| dataplane: case-insensitive handle search in the SQL fallback       | The SQL search fallback missed a handle when the query's case differed.                                                        | Yes                                   |
-| dataplane: push bridge falls back to the title "mu", not "Blacksky" | Our pushes go to the mu app (EUR-241).                                                                                         | No: make the title configurable first |
-| dataplane: like-subject index migration only records itself         | A plain `CREATE INDEX` on our 17.8B-row like table blocks like writes for hours. Build the index by hand if it is ever wanted. | No                                    |
-| dataplane: getKnownLikers starts from the viewer's follows          | "Liked by people you follow" without the like-subject index.                                                                   | Maybe, with the timings               |
-| dataplane: only the self labeler record makes an account a labeler  | Accounts with several labeler records failed every page that showed them (EUR-647). The bug is on Blacksky's `main` too.       | Yes                                   |
-| dataplane: bsync-subscription keeps its cursor in the database      | A restart resumes instead of replaying bsync's whole log (EUR-469).                                                            | Yes                                   |
-| bsky: tests for the Eurosky commits (tests/eurosky)                 | Tests for the commits above.                                                                                                   | With each commit                      |
+| Commit                                                                             | Why                                                                                                                            | Offer to Blacksky?                    |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| dataplane: case-insensitive handle search in the SQL fallback                      | The SQL search fallback missed a handle when the query's case differed.                                                        | Yes                                   |
+| dataplane: push bridge falls back to the title "mu", not "Blacksky"                | Our pushes go to the mu app (EUR-241).                                                                                         | No: make the title configurable first |
+| dataplane: like-subject index migration only records itself                        | A plain `CREATE INDEX` on our 17.8B-row like table blocks like writes for hours. Build the index by hand if it is ever wanted. | No                                    |
+| dataplane: getKnownLikers starts from the viewer's follows                         | "Liked by people you follow" without the like-subject index.                                                                   | Maybe, with the timings               |
+| dataplane: only the self labeler record makes an account a labeler                 | Accounts with several labeler records failed every page that showed them (EUR-647). The bug is on Blacksky's `main` too.       | Yes                                   |
+| dataplane: bsync-subscription keeps its cursor in the database                     | A restart resumes instead of replaying bsync's whole log (EUR-469).                                                            | Yes                                   |
+| bsky: tests for the Eurosky commits (tests/eurosky)                                | Tests for the commits above.                                                                                                   | With each commit                      |
+| bsky: answer cursors from another AppView with a 400, or continue from an ISO time | A client switching AppViews mid-scroll sent Bluesky's cursor here and got a 500 (EUR-648).                                     | Yes                                   |
 
 Tests for our changes live in `packages/bsky/tests/eurosky/`. Each PR that changes behavior adds or updates one there.
 

@@ -32,6 +32,7 @@ import {
   BasicHostList,
   EtcdHostList,
   createDataPlaneClient,
+  xrpcErrorParser,
 } from './data-plane/client/index.js'
 import * as error from './error.js'
 import { FeatureGatesClient } from './feature-gates/index.js'
@@ -311,6 +312,7 @@ export class BskyAppView {
         textLimit: 100 * 1024, // 100kb
         blobLimit: 5 * 1024 * 1024, // 5mb
       },
+      errorParser: xrpcErrorParser,
     })
 
     API(server, ctx)
