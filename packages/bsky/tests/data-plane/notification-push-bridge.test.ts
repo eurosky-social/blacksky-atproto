@@ -17,6 +17,8 @@ import {
   type NotificationPushBridgeConfig,
   type NotificationRow,
   getCourierNotificationId,
+  isRecentEnoughToPush,
+  parseMaxAgeMinutes,
   shouldPushForReason,
   toCourierNotification,
 } from '../../src/data-plane/server/notification-push-bridge.js'
@@ -423,6 +425,81 @@ describe('notification push bridge', () => {
     expect(rows[0].lastError).toBe('second failure')
     expect(rows[0].courierNotificationId).toBe(getCourierNotificationId(row))
   })
+
+  // A repository read again later (a backfill, a gap fill) inserts its old
+  // likes and follows at their own time. They belong in the list, not in a
+  // push today.
+  it('does not push notifications older than the max age', async () => {
+    const row = await insertNotification({ sortAt: minutesAgo(61) })
+    const pushNotifications = vi.fn().mockResolvedValue({})
+    const bridge = createBridge(pushNotifications, { maxAgeMinutes: 60 })
+
+    await bridge.flushOnceForTest([row.id])
+
+    expect(pushNotifications).not.toHaveBeenCalled()
+    await expect(outboxRows()).resolves.toHaveLength(0)
+  })
+
+  it('pushes notifications within the max age', async () => {
+    const row = await insertNotification({ sortAt: minutesAgo(59) })
+    const pushNotifications = vi.fn().mockResolvedValue({})
+    const bridge = createBridge(pushNotifications, { maxAgeMinutes: 60 })
+
+    await bridge.flushOnceForTest([row.id])
+
+    expect(pushNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  it('pushes only the recent notifications of a batch', async () => {
+    const old = await insertNotification({
+      recordUri: 'at://did:plc:actor/app.bsky.feed.like/old',
+      sortAt: '2026-06-26T14:45:53.000Z',
+    })
+    const recent = await insertNotification({
+      recordUri: 'at://did:plc:actor/app.bsky.feed.like/recent',
+    })
+    const pushNotifications = vi.fn().mockResolvedValue({})
+    const bridge = createBridge(pushNotifications)
+
+    await bridge.flushOnceForTest([old.id, recent.id])
+
+    expect(pushNotifications).toHaveBeenCalledTimes(1)
+    const req = pushNotifications.mock.calls[0][0]
+    expect(req.notifications.map((n) => n.id)).toEqual([
+      getCourierNotificationId(recent),
+    ])
+  })
+
+  it('reads the max age from the environment and refuses nonsense', () => {
+    expect(parseMaxAgeMinutes(undefined)).toBe(60)
+    expect(parseMaxAgeMinutes('')).toBe(60)
+    expect(parseMaxAgeMinutes('0')).toBe(0)
+    expect(parseMaxAgeMinutes('360')).toBe(360)
+    expect(() => parseMaxAgeMinutes('1h')).toThrow()
+    expect(() => parseMaxAgeMinutes('-5')).toThrow()
+    expect(() => parseMaxAgeMinutes('2.5')).toThrow()
+  })
+
+  it('pushes a notification whose time cannot be read', () => {
+    expect(isRecentEnoughToPush({ sortAt: 'not a time' }, 60)).toBe(true)
+    expect(isRecentEnoughToPush({ sortAt: minutesAgo(120) }, Number.NaN)).toBe(
+      true,
+    )
+  })
+
+  it('pushes old notifications when the max age is 0', async () => {
+    const row = await insertNotification({ sortAt: '2026-06-26T14:45:53.000Z' })
+    const pushNotifications = vi.fn().mockResolvedValue({})
+    const bridge = createBridge(pushNotifications, { maxAgeMinutes: 0 })
+
+    await bridge.flushOnceForTest([row.id])
+
+    expect(pushNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  function minutesAgo(minutes: number) {
+    return new Date(Date.now() - minutes * 60 * 1000).toISOString()
+  }
 
   function createBridge(
     pushNotifications: ReturnType<typeof vi.fn>,

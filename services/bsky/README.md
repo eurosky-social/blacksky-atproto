@@ -23,6 +23,7 @@ This is the service entrypoint for the bsky appview. The entrypoint command shou
 - `BSKY_NOTIFICATION_PUSH_RETRY_INTERVAL_MS` - base retry interval for failed courier handoffs. Defaults to `10000`.
 - `BSKY_NOTIFICATION_PUSH_MAX_ATTEMPTS` - max AppView-to-courier retry attempts. Defaults to `10`.
 - `BSKY_NOTIFICATION_PUSH_TTL_HOURS` - expiry window for failed courier handoff retries. Defaults to `24`.
+- `BSKY_NOTIFICATION_PUSH_MAX_AGE_MINUTES` - notifications whose time is older than this are listed but not pushed, such as the likes and follows of a repository read again later. `0` pushes every notification. Defaults to `60`.
 - `BSKY_BSYNC_URL` - URL of bsync service.
 - `BSKY_BSYNC_API_KEY` - API key for bsync service.
 - `BSKY_SEARCH_URL` - (alt. `BSKY_SEARCH_ENDPOINT`) -

@@ -65,7 +65,15 @@ export type NotificationPushBridgeConfig = {
   maxAttempts: number
   ttlHours: number
   maintenanceBatchSize: number
+  // Notifications whose sortAt is older than this are listed but never
+  // pushed; 0 pushes every notification. Defaults to DEFAULT_MAX_AGE_MINUTES.
+  maxAgeMinutes?: number
 }
+
+// A live notification reaches the bridge seconds after its event. One much
+// older comes from reading a repository again (a backfill, a gap fill), which
+// stamps each record with its own time.
+export const DEFAULT_MAX_AGE_MINUTES = 60
 
 export type NotificationRow = {
   id: number
@@ -285,7 +293,11 @@ export class NotificationPushBridge {
       .then((rows) => rows.map(normalizeReason))
   }
 
-  private async sendRows(rows: NotificationRow[]) {
+  private async sendRows(allRows: NotificationRow[]) {
+    const rows = allRows.filter((row) =>
+      isRecentEnoughToPush(row, this.cfg.maxAgeMinutes),
+    )
+    if (rows.length === 0) return
     const prefsByDid = await this.getPushPreferencesByDid([
       ...new Set(rows.map((row) => row.did)),
     ])
@@ -991,6 +1003,9 @@ export const parseNotificationPushBridgeConfigFromEnv =
         process.env.BSKY_NOTIFICATION_PUSH_TTL_HOURS || '24',
         10,
       ),
+      maxAgeMinutes: parseMaxAgeMinutes(
+        process.env.BSKY_NOTIFICATION_PUSH_MAX_AGE_MINUTES,
+      ),
       maintenanceBatchSize: parseInt(
         process.env.BSKY_NOTIFICATION_PUSH_MAINTENANCE_BATCH_SIZE || '5000',
         10,
@@ -1018,6 +1033,31 @@ const normalizeReason = (row: NotificationRow): NotificationRow =>
   row.reason === NOTIFICATION_REASON.FOLLOW_BACK
     ? { ...row, reason: NOTIFICATION_REASON.FOLLOW }
     : row
+
+// A value that isn't a whole number of minutes would stop every push, so it
+// fails startup instead.
+export function parseMaxAgeMinutes(value: string | undefined): number {
+  if (value === undefined || value === '') return DEFAULT_MAX_AGE_MINUTES
+  const minutes = Number(value)
+  if (!Number.isInteger(minutes) || minutes < 0) {
+    throw new Error(
+      'BSKY_NOTIFICATION_PUSH_MAX_AGE_MINUTES must be a whole number of minutes (0 pushes every notification)',
+    )
+  }
+  return minutes
+}
+
+export function isRecentEnoughToPush(
+  row: Pick<NotificationRow, 'sortAt'>,
+  maxAgeMinutes = DEFAULT_MAX_AGE_MINUTES,
+  now = Date.now(),
+) {
+  if (!Number.isFinite(maxAgeMinutes) || maxAgeMinutes <= 0) return true
+  const sortAt = Date.parse(row.sortAt)
+  // An unreadable time is pushed, as before this check existed.
+  if (Number.isNaN(sortAt)) return true
+  return now - sortAt <= maxAgeMinutes * 60 * 1000
+}
 
 export function shouldPushForReason(
   prefs: Partial<app.bsky.notification.defs.Preferences> | undefined,

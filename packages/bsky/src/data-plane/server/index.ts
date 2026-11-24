@@ -21,6 +21,7 @@ export {
   createDbCursorStore,
 } from './bsync-subscription.js'
 export { RepoSubscription } from './subscription.js'
+export { parseMaxAgeMinutes } from './notification-push-bridge.js'
 
 export interface DataPlaneServerOptions {
   db: Database
