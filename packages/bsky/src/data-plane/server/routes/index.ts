@@ -19,6 +19,7 @@ import interactions from './interactions.js'
 import labels from './labels.js'
 import likes from './likes.js'
 import lists from './lists.js'
+import mediaTime from './media-time.js'
 import moderation from './moderation.js'
 import mutes from './mutes.js'
 import notifs from './notifs.js'
@@ -57,6 +58,7 @@ export default (
       ...labels(db),
       ...likes(db),
       ...lists(db),
+      ...mediaTime(db),
       ...moderation(db),
       ...mutes(db),
       ...notifs(db),

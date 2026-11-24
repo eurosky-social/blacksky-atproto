@@ -2122,6 +2122,10 @@ service Service {
   rpc GetCalendarEventViewerStates(GetCalendarEventViewerStatesRequest) returns (GetCalendarEventViewerStatesResponse);
   rpc GetCalendarEventRsvps(GetCalendarEventRsvpsRequest) returns (GetCalendarEventRsvpsResponse);
   rpc GetMyCalendarEvents(GetMyCalendarEventsRequest) returns (GetMyCalendarEventsResponse);
+
+  // Eurosky
+  rpc GetMediaTimeReplies(GetMediaTimeRepliesRequest) returns (GetMediaTimeRepliesResponse);
+  rpc GetMediaTimeCounts(GetMediaTimeCountsRequest) returns (GetMediaTimeCountsResponse);
 }
 
 
@@ -2616,4 +2620,38 @@ message GetMyCalendarEventsRequest {
 message GetMyCalendarEventsResponse {
   repeated string uris = 1;
   string cursor = 2;
+}
+
+// Eurosky: direct replies to a post that carry a network.eurosky.mediaTime
+// field (the second of the parent's video they are about).
+
+message GetMediaTimeRepliesRequest {
+  string post_uri = 1;
+  int32 limit = 2;
+}
+
+message MediaTimeReply {
+  string uri = 1;
+  int32 seconds = 2;
+}
+
+message GetMediaTimeRepliesResponse {
+  repeated MediaTimeReply replies = 1;
+  // More linked replies exist than the limit allowed.
+  bool truncated = 2;
+}
+
+// Linked replies per second of the video, for several posts.
+message GetMediaTimeCountsRequest {
+  repeated string post_uris = 1;
+}
+
+message MediaTimeCount {
+  string post_uri = 1;
+  int32 seconds = 2;
+  int32 count = 3;
+}
+
+message GetMediaTimeCountsResponse {
+  repeated MediaTimeCount counts = 1;
 }
