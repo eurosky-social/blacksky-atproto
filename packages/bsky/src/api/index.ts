@@ -130,6 +130,7 @@ import getCommunityUnreadCount from './community/blacksky/notification/getUnread
 import listCommunityNotifications from './community/blacksky/notification/listNotifications.js'
 import projectSpaceRecords from './community/blacksky/space/projectRecords.js'
 import internalGetProfiles from './internal/bsky/actor/getProfiles.js'
+import getMomentSummaries from './network/eurosky/feed/getMomentSummaries.js'
 import getMoments from './network/eurosky/feed/getMoments.js'
 
 export * as health from './health.js'
@@ -279,4 +280,5 @@ export default function (server: Server, ctx: AppContext) {
   projectSpaceRecords(server, ctx)
   // network.eurosky
   getMoments(server, ctx)
+  getMomentSummaries(server, ctx)
 }

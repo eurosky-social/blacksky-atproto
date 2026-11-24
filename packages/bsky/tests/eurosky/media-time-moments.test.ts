@@ -9,8 +9,10 @@ import {
 import type { AtUriString, DidString } from '@atproto/syntax'
 import {
   MAX_REPLIES_PER_MOMENT,
+  groupCountsIntoMoments,
   groupIntoMoments,
 } from '../../src/api/network/eurosky/feed/moments.js'
+import { TtlCache } from '../../src/api/network/eurosky/feed/summary-cache.js'
 
 // network.eurosky.feed.getMoments. mu writes the second of a video a reply
 // is about into an extra field of the reply's post record; the AppView reads
@@ -48,6 +50,15 @@ describe('eurosky: moments of a video post', () => {
     })
     uris[name] = res.ref.uriStr
     return res.ref
+  }
+
+  const getSummaries = async (uris: string[]) => {
+    const query = uris.map((uri) => `uris=${encodeURIComponent(uri)}`)
+    const res = await fetch(
+      `${network.bsky.url}/xrpc/network.eurosky.feed.getMomentSummaries?${query.join('&')}`,
+    )
+    expect(res.status).toBe(200)
+    return res.json()
   }
 
   const getMoments = async (uri: string) => {
@@ -157,6 +168,59 @@ describe('eurosky: moments of a video post', () => {
     expect(res.truncated).toBe(true)
   })
 
+  it('summarises several posts at once, in the order asked', async () => {
+    const res = await getSummaries([
+      quietPost.uriStr,
+      video.uriStr,
+      otherPost.uriStr,
+      video.uriStr,
+    ])
+    const videoSummary = {
+      uri: video.uriStr,
+      replyCount: 3,
+      moments: [
+        { startSeconds: 41, endSeconds: 50, replyCount: 2 },
+        { startSeconds: 200, endSeconds: 200, replyCount: 1 },
+      ],
+    }
+    expect(res.summaries).toEqual([
+      { uri: quietPost.uriStr, replyCount: 0, moments: [] },
+      videoSummary,
+      {
+        uri: otherPost.uriStr,
+        replyCount: 1,
+        moments: [{ startSeconds: 41, endSeconds: 41, replyCount: 1 }],
+      },
+      videoSummary,
+    ])
+  })
+
+  it('counts several replies at the same second', async () => {
+    const res = await network.bsky.ctx.dataplane.getMediaTimeCounts({
+      postUris: [video.uriStr, quietPost.uriStr],
+    })
+    expect(
+      res.counts
+        .map((c) => [c.postUri, c.seconds, c.count])
+        .sort((a, b) => Number(a[1]) - Number(b[1])),
+    ).toEqual([
+      [video.uriStr, 41, 1],
+      [video.uriStr, 50, 1],
+      [video.uriStr, 200, 1],
+    ])
+  })
+
+  it('answers summaries from its cache for a minute', async () => {
+    // carol's account is taken down in the next test, so this reply does
+    // not change what that test expects
+    await reply('late', carol, mediaTime(600))
+    await network.processAll()
+    const cached = await getSummaries([video.uriStr])
+    expect(cached.summaries[0].replyCount).toBe(3)
+    const fresh = await getMoments(video.uriStr)
+    expect(fresh.replyCount).toBe(4)
+  })
+
   it('leaves out replies the AppView would not show', async () => {
     const extra = {
       takenDown: await reply('takenDown', bob, mediaTime(300)),
@@ -204,6 +268,46 @@ describe('eurosky: moments of a video post', () => {
       },
     ])
     expect(res.replyCount).toBe(2)
+  })
+})
+
+describe('eurosky: grouping counts into moments', () => {
+  it('groups seconds like single replies and adds up their counts', () => {
+    expect(
+      groupCountsIntoMoments([
+        { seconds: 100, count: 4 },
+        { seconds: 0, count: 2 },
+        { seconds: 30, count: 1 },
+        { seconds: 61, count: 0 },
+        { seconds: 61, count: 3 },
+      ]),
+    ).toEqual([
+      { startSeconds: 0, endSeconds: 30, replyCount: 3 },
+      { startSeconds: 61, endSeconds: 61, replyCount: 3 },
+      { startSeconds: 100, endSeconds: 100, replyCount: 4 },
+    ])
+  })
+})
+
+describe('eurosky: summary cache', () => {
+  it('forgets entries after their time and drops the oldest when full', () => {
+    let now = 0
+    const cache = new TtlCache<number>({
+      ttlMs: 1000,
+      maxEntries: 2,
+      now: () => now,
+    })
+    cache.set('a', 1)
+    cache.set('b', 2)
+    expect(cache.get('a')).toBe(1)
+    cache.set('c', 3)
+    expect(cache.get('a')).toBeUndefined()
+    expect(cache.size).toBe(2)
+    now = 999
+    expect(cache.get('b')).toBe(2)
+    now = 1000
+    expect(cache.get('b')).toBeUndefined()
+    expect(cache.get('c')).toBeUndefined()
   })
 })
 

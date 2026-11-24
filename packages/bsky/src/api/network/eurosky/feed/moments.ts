@@ -50,3 +50,35 @@ export function groupIntoMoments(
   }
   return moments
 }
+
+export type MediaTimeCount = { seconds: number; count: number }
+
+export type MomentSummary = {
+  startSeconds: number
+  endSeconds: number
+  replyCount: number
+}
+
+/**
+ * The same grouping as `groupIntoMoments`, from the number of replies at
+ * each second.
+ */
+export function groupCountsIntoMoments(
+  counts: readonly MediaTimeCount[],
+  gapSeconds = MOMENT_GAP_SECONDS,
+): MomentSummary[] {
+  const sorted = [...counts]
+    .filter((c) => c.count > 0)
+    .sort((a, b) => a.seconds - b.seconds)
+  const moments: MomentSummary[] = []
+  let current: MomentSummary | undefined
+  for (const { seconds, count } of sorted) {
+    if (!current || seconds - current.endSeconds > gapSeconds) {
+      current = { startSeconds: seconds, endSeconds: seconds, replyCount: 0 }
+      moments.push(current)
+    }
+    current.endSeconds = seconds
+    current.replyCount += count
+  }
+  return moments
+}

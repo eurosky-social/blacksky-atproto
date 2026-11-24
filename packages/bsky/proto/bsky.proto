@@ -2125,6 +2125,7 @@ service Service {
 
   // Eurosky
   rpc GetMediaTimeReplies(GetMediaTimeRepliesRequest) returns (GetMediaTimeRepliesResponse);
+  rpc GetMediaTimeCounts(GetMediaTimeCountsRequest) returns (GetMediaTimeCountsResponse);
 }
 
 
@@ -2638,4 +2639,19 @@ message GetMediaTimeRepliesResponse {
   repeated MediaTimeReply replies = 1;
   // More linked replies exist than the limit allowed.
   bool truncated = 2;
+}
+
+// Linked replies per second of the video, for several posts.
+message GetMediaTimeCountsRequest {
+  repeated string post_uris = 1;
+}
+
+message MediaTimeCount {
+  string post_uri = 1;
+  int32 seconds = 2;
+  int32 count = 3;
+}
+
+message GetMediaTimeCountsResponse {
+  repeated MediaTimeCount counts = 1;
 }

@@ -391,6 +391,7 @@
     "community.lexicon.location.geo",
     "community.lexicon.location.hthree",
     "internal.bsky.actor.getProfiles",
+    "network.eurosky.feed.getMomentSummaries",
     "network.eurosky.feed.getMoments",
     "place.stream.badge.defs",
     "place.stream.chat.defs",
@@ -1989,6 +1990,10 @@
     "internal.bsky.actor.getProfiles": {
       "uri": "file://../../lexicons-overrides/internal/bsky/actor/getProfiles.json",
       "cid": "bafyreihdyn4pmc3brvufe7vp4c6psldxeumydfmeqvoswfydtw5fjcy6rq"
+    },
+    "network.eurosky.feed.getMomentSummaries": {
+      "uri": "file://../../lexicons/network/eurosky/feed/getMomentSummaries.json",
+      "cid": "bafyreid4dgnxf2u7jiar3ksau35nhei4ieoqizwl2bvw6tktws2dc4mia4"
     },
     "network.eurosky.feed.getMoments": {
       "uri": "file://../../lexicons/network/eurosky/feed/getMoments.json",
