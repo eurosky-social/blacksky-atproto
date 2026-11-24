@@ -27,6 +27,7 @@ The branch starts at Blacksky's `22656646941` (2026-11-18, merge of their #69). 
 | bsky: tests for the Eurosky commits (tests/eurosky)                                | Tests for the commits above.                                                                                                                        | With each commit                      |
 | bsky: answer cursors from another AppView with a 400, or continue from an ISO time | A client switching AppViews mid-scroll sent Bluesky's cursor here and got a 500 (EUR-648).                                                          | Yes                                   |
 | dataplane: push bridge skips notifications older than an hour                      | Reading a repository again (a gap fill, EUR-654) inserts its old likes and follows at their own time. They belong in the list, not in a push today. | Yes                                   |
+| bsky: network.eurosky.feed.getMoments, the moments of a video post                 | Moments in mu: a video's replies linked to a second (`network.eurosky.mediaTime`), all of them, not the 200 a thread returns.                       | No: our own lexicon                   |
 
 Tests for our changes live in `packages/bsky/tests/eurosky/`. Each PR that changes behavior adds or updates one there.
 
