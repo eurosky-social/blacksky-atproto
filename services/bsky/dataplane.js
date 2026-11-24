@@ -1,4 +1,4 @@
-import { DataPlaneServer, Database } from '@atproto/bsky'
+import { DataPlaneServer, Database, parseMaxAgeMinutes } from '@atproto/bsky'
 
 const main = async () => {
   const dbUrl = process.env.BSKY_DB_POSTGRES_URL
@@ -39,6 +39,9 @@ const main = async () => {
     ttlHours: parseInt(
       process.env.BSKY_NOTIFICATION_PUSH_TTL_HOURS || '24',
       10,
+    ),
+    maxAgeMinutes: parseMaxAgeMinutes(
+      process.env.BSKY_NOTIFICATION_PUSH_MAX_AGE_MINUTES,
     ),
   }
 
