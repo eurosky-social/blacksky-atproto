@@ -26,6 +26,7 @@ import {
   invalidReplyRoot as checkInvalidReplyRoot,
   violatesThreadGate as checkViolatesThreadGate,
 } from '../../util.js'
+import { mediaTimeSeconds } from '../media-time.js'
 import { RecordProcessor } from '../processor.js'
 
 type Notif = Insertable<Notification>
@@ -137,6 +138,20 @@ const insertFn = async (
         .onConflict((oc) => oc.doNothing())
         .execute()
     }
+  }
+
+  // Eurosky: a reply that names a second of the video it answers
+  const mediaTime = mediaTimeSeconds(obj)
+  if (post.replyParent && mediaTime !== undefined) {
+    await db
+      .insertInto('post_media_time')
+      .values({
+        postUri: post.uri,
+        parentUri: post.replyParent,
+        seconds: mediaTime,
+      })
+      .onConflict((oc) => oc.doNothing())
+      .execute()
   }
 
   const facets = (obj.facets || [])
@@ -422,6 +437,10 @@ const deleteFn = async (
       .updateTable('op_thread_reply')
       .where('uri', '=', uriStr)
       .set({ deletedAt: new Date().toISOString() })
+      .executeTakeFirst(),
+    db
+      .deleteFrom('post_media_time')
+      .where('postUri', '=', uriStr)
       .executeTakeFirst(),
   ])
   await db.deleteFrom('quote').where('subject', '=', uriStr).execute()

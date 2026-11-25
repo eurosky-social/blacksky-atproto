@@ -1,6 +1,6 @@
-// Eurosky: a small in-process cache for moment summaries. Feeds show the
-// same popular video to many people; without it each impression would read
-// all of the video's direct replies again.
+// Eurosky: a small in-process cache for moments and moment summaries. Feeds
+// and threads show the same popular video to many people; without it each
+// view would read the video's linked replies again.
 
 export type TtlCacheOptions = {
   ttlMs: number
@@ -36,6 +36,10 @@ export class TtlCache<T> {
       if (oldest === undefined) break
       this.entries.delete(oldest)
     }
+  }
+
+  delete(key: string) {
+    this.entries.delete(key)
   }
 
   get size() {
