@@ -33,6 +33,7 @@ import type * as peerModLabel from './tables/peer-mod-label.js'
 import type * as postAgg from './tables/post-agg.js'
 import type * as postEmbed from './tables/post-embed.js'
 import type * as postgate from './tables/post-gate.js'
+import type * as postMediaTime from './tables/post-media-time.js'
 import type * as post from './tables/post.js'
 import type * as privateData from './tables/private-data.js'
 import type * as profileAgg from './tables/profile-agg.js'
@@ -56,6 +57,7 @@ export type DatabaseSchemaType = duplicateRecord.PartialDB &
   profileAgg.PartialDB &
   post.PartialDB &
   postEmbed.PartialDB &
+  postMediaTime.PartialDB &
   postAgg.PartialDB &
   repost.PartialDB &
   threadgate.PartialDB &

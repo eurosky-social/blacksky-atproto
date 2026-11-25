@@ -98,3 +98,5 @@ export * as _20261103T000000001Z from './20260827T200000000Z-reference-list-opt-
 export * as _20261103T000000002Z from './20260904T130000000Z-remove-last-seen-priority-notifs.js'
 export * as _20261103T000000003Z from './20260918T214110000Z-remove-priority-notifs.js'
 export * as _20261116T120000000Z from './20261116T120000000Z-post-langs-tags-array.js'
+// Eurosky: replies that name a second of a video (network.eurosky.mediaTime).
+export * as _20261125T120000000Z from './20261125T120000000Z-post-media-time.js'

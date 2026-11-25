@@ -13,11 +13,16 @@ import {
   groupIntoMoments,
 } from '../../src/api/network/eurosky/feed/moments.js'
 import { TtlCache } from '../../src/api/network/eurosky/feed/summary-cache.js'
+import {
+  MAX_MEDIA_TIME_SECONDS,
+  mediaTimeSeconds,
+} from '../../src/data-plane/server/indexing/media-time.js'
 
 // network.eurosky.feed.getMoments. mu writes the second of a video a reply
-// is about into an extra field of the reply's post record; the AppView reads
-// it back from the stored record and groups a video's direct replies into
-// moments. The answer must not count replies the AppView would not show.
+// is about into an extra field of the reply's post record; the indexer keeps
+// valid values in post_media_time, and the AppView groups a video's direct
+// replies into moments. The answer must not count replies the AppView would
+// not show.
 
 const FIELD = 'network.eurosky.mediaTime'
 
@@ -143,6 +148,22 @@ describe('eurosky: moments of a video post', () => {
     })
   })
 
+  it('keeps only valid linked replies in post_media_time', async () => {
+    const rows = await network.bsky.db.db
+      .selectFrom('post_media_time')
+      .selectAll()
+      .where('parentUri', 'in', [video.uriStr, uris.at41])
+      .orderBy('seconds')
+      .execute()
+    expect(rows).toEqual([
+      { postUri: uris.at41, parentUri: video.uriStr, seconds: 41 },
+      // a reply to a reply is kept under its own parent
+      { postUri: uris.nested, parentUri: uris.at41, seconds: 42 },
+      { postUri: uris.at50, parentUri: video.uriStr, seconds: 50 },
+      { postUri: uris.at200, parentUri: video.uriStr, seconds: 200 },
+    ])
+  })
+
   it('answers with no moments for a post without linked replies', async () => {
     expect(await getMoments(quietPost.uriStr)).toEqual({
       uri: quietPost.uriStr,
@@ -210,15 +231,20 @@ describe('eurosky: moments of a video post', () => {
     ])
   })
 
-  it('answers summaries from its cache for a minute', async () => {
+  it('answers from its cache: summaries for a minute, moments for 30 seconds', async () => {
+    expect((await getMoments(video.uriStr)).replyCount).toBe(3)
     // carol's account is taken down in the next test, so this reply does
     // not change what that test expects
     await reply('late', carol, mediaTime(600))
     await network.processAll()
-    const cached = await getSummaries([video.uriStr])
-    expect(cached.summaries[0].replyCount).toBe(3)
-    const fresh = await getMoments(video.uriStr)
-    expect(fresh.replyCount).toBe(4)
+    const summaries = await getSummaries([video.uriStr])
+    expect(summaries.summaries[0].replyCount).toBe(3)
+    const moments = await getMoments(video.uriStr)
+    expect(moments.replyCount).toBe(3)
+    const fresh = await network.bsky.ctx.dataplane.getMediaTimeReplies({
+      postUri: video.uriStr,
+    })
+    expect(fresh.replies).toHaveLength(4)
   })
 
   it('leaves out replies the AppView would not show', async () => {
@@ -251,23 +277,61 @@ describe('eurosky: moments of a video post', () => {
       .where('uri', '=', extra.againstGate.uriStr)
       .execute()
 
-    const res = await getMoments(video.uriStr)
+    // getMoments has the video cached from earlier tests, so this asks the
+    // dataplane, which both endpoints read from
+    const res = await dataplane.getMediaTimeReplies({ postUri: video.uriStr })
     // bob's 0:41 stays; carol's 0:50 and dan's 3:20 go with their accounts
-    expect(res.moments).toEqual([
-      {
-        startSeconds: 41,
-        endSeconds: 41,
-        replyCount: 1,
-        replies: [{ uri: uris.at41, seconds: 41 }],
-      },
-      {
-        startSeconds: 305,
-        endSeconds: 305,
-        replyCount: 1,
-        replies: [{ uri: uris.kept, seconds: 305 }],
-      },
+    expect(res.replies).toEqual([
+      { uri: uris.at41, seconds: 41 },
+      { uri: uris.kept, seconds: 305 },
     ])
-    expect(res.replyCount).toBe(2)
+    const counts = await dataplane.getMediaTimeCounts({
+      postUris: [video.uriStr],
+    })
+    expect(counts.counts.map((c) => c.seconds).sort((a, b) => a - b)).toEqual([
+      41, 305,
+    ])
+    // the deleted reply's row went with it
+    const deletedRow = await network.bsky.db.db
+      .selectFrom('post_media_time')
+      .select('postUri')
+      .where('postUri', '=', extra.deleted.uriStr)
+      .executeTakeFirst()
+    expect(deletedRow).toBeUndefined()
+  })
+})
+
+describe('eurosky: reading the second a record names', () => {
+  const field = 'network.eurosky.mediaTime'
+
+  it('reads whole seconds within 100 hours', () => {
+    expect(mediaTimeSeconds({ [field]: { $type: field, seconds: 41 } })).toBe(
+      41,
+    )
+    expect(mediaTimeSeconds({ [field]: { seconds: 0 } })).toBe(0)
+    expect(
+      mediaTimeSeconds({ [field]: { seconds: MAX_MEDIA_TIME_SECONDS } }),
+    ).toBe(MAX_MEDIA_TIME_SECONDS)
+  })
+
+  it('ignores anything else', () => {
+    for (const value of [
+      undefined,
+      null,
+      41,
+      [41],
+      { $type: 'x.y.z', seconds: 7 },
+      { $type: null, seconds: 7 },
+      { seconds: -1 },
+      { seconds: 4.5 },
+      { seconds: MAX_MEDIA_TIME_SECONDS + 1 },
+      { seconds: '41' },
+      {},
+    ]) {
+      expect(mediaTimeSeconds({ [field]: value })).toBeUndefined()
+    }
+    expect(mediaTimeSeconds(null)).toBeUndefined()
+    expect(mediaTimeSeconds('text')).toBeUndefined()
   })
 })
 
