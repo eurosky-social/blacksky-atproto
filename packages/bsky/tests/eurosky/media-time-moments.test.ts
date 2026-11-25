@@ -130,7 +130,7 @@ describe('eurosky: moments of a video post', () => {
       replyCount: 3,
       moments: [
         {
-          startSeconds: 41,
+          startSeconds: 36,
           endSeconds: 50,
           replyCount: 2,
           replies: [
@@ -139,7 +139,7 @@ describe('eurosky: moments of a video post', () => {
           ],
         },
         {
-          startSeconds: 200,
+          startSeconds: 195,
           endSeconds: 200,
           replyCount: 1,
           replies: [{ uri: uris.at200, seconds: 200 }],
@@ -176,7 +176,7 @@ describe('eurosky: moments of a video post', () => {
     const res = await getMoments(otherPost.uriStr)
     expect(res.replyCount).toBe(1)
     expect(res.moments).toEqual([
-      expect.objectContaining({ startSeconds: 41, replyCount: 1 }),
+      expect.objectContaining({ startSeconds: 36, replyCount: 1 }),
     ])
   })
 
@@ -200,8 +200,8 @@ describe('eurosky: moments of a video post', () => {
       uri: video.uriStr,
       replyCount: 3,
       moments: [
-        { startSeconds: 41, endSeconds: 50, replyCount: 2 },
-        { startSeconds: 200, endSeconds: 200, replyCount: 1 },
+        { startSeconds: 36, endSeconds: 50, replyCount: 2 },
+        { startSeconds: 195, endSeconds: 200, replyCount: 1 },
       ],
     }
     expect(res.summaries).toEqual([
@@ -210,7 +210,7 @@ describe('eurosky: moments of a video post', () => {
       {
         uri: otherPost.uriStr,
         replyCount: 1,
-        moments: [{ startSeconds: 41, endSeconds: 41, replyCount: 1 }],
+        moments: [{ startSeconds: 36, endSeconds: 41, replyCount: 1 }],
       },
       videoSummary,
     ])
@@ -336,19 +336,19 @@ describe('eurosky: reading the second a record names', () => {
 })
 
 describe('eurosky: grouping counts into moments', () => {
-  it('groups seconds like single replies and adds up their counts', () => {
+  it('groups seconds by their counts, skipping empty ones', () => {
     expect(
       groupCountsIntoMoments([
-        { seconds: 100, count: 4 },
+        { seconds: 400, count: 4 },
         { seconds: 0, count: 2 },
-        { seconds: 30, count: 1 },
-        { seconds: 61, count: 0 },
-        { seconds: 61, count: 3 },
+        { seconds: 200, count: 1 },
+        { seconds: 401, count: 0 },
+        { seconds: 401, count: 3 },
       ]),
     ).toEqual([
-      { startSeconds: 0, endSeconds: 30, replyCount: 3 },
-      { startSeconds: 61, endSeconds: 61, replyCount: 3 },
-      { startSeconds: 100, endSeconds: 100, replyCount: 4 },
+      { startSeconds: 0, endSeconds: 0, replyCount: 2 },
+      { startSeconds: 195, endSeconds: 200, replyCount: 1 },
+      { startSeconds: 395, endSeconds: 401, replyCount: 7 },
     ])
   })
 })
@@ -376,33 +376,79 @@ describe('eurosky: summary cache', () => {
 })
 
 describe('eurosky: grouping into moments', () => {
-  const r = (seconds: number, n = seconds) => ({
-    uri: `at://did:plc:a/app.bsky.feed.post/${String(n).padStart(4, '0')}` as AtUriString,
+  let n = 0
+  const r = (seconds: number) => ({
+    uri: `at://did:plc:a/app.bsky.feed.post/${String(n++).padStart(4, '0')}` as AtUriString,
     seconds,
   })
+  const spans = (seconds: number[]) =>
+    groupIntoMoments(seconds.map(r)).map((m) => [
+      m.startSeconds,
+      m.endSeconds,
+      m.replyCount,
+    ])
+  // two busy spots 38 seconds apart, with two replies between them
+  const twoSpots = [
+    60, 61, 62, 63, 64, 65, 66, 66, 80, 85, 98, 99, 100, 101, 102, 103, 104,
+    104,
+  ]
 
-  it('starts a moment after a gap of more than 30 seconds', () => {
-    const moments = groupIntoMoments([r(100), r(0), r(30), r(61), r(130)])
-    expect(
-      moments.map((m) => [m.startSeconds, m.endSeconds, m.replyCount]),
-    ).toEqual([
-      [0, 30, 2],
-      [61, 61, 1],
-      [100, 130, 2],
+  it("starts a reply's moment 5 seconds before it, and not before 0", () => {
+    expect(spans([41])).toEqual([[36, 41, 1]])
+    expect(spans([2])).toEqual([[0, 2, 1]])
+  })
+
+  it('keeps two busy spots apart when a few replies lie between them', () => {
+    // a 30-second gap between replies would have made this one moment
+    expect(spans(twoSpots)).toEqual([
+      [55, 80, 9],
+      [82, 104, 9],
     ])
   })
 
-  it('measures the gap from the previous reply, not the first', () => {
-    const moments = groupIntoMoments([r(0), r(25), r(50), r(75)])
-    expect(moments).toHaveLength(1)
-    expect(moments[0].endSeconds).toBe(75)
+  it('keeps a long, even stretch of replies as one moment', () => {
+    const everyThreeSeconds = Array.from({ length: 31 }, (_, i) => 120 + 3 * i)
+    expect(spans(everyThreeSeconds)).toEqual([[119, 210, 31]])
   })
 
-  it('lists at most 100 replies per moment but counts all', () => {
-    const replies = Array.from({ length: 150 }, (_, i) => r(10, i))
+  it('starts where replies pile up, not at a stray earlier reply', () => {
+    expect(
+      spans([100, 125, 125, 126, 126, 126, 127, 127, 128, 128, 128]),
+    ).toEqual([[115, 128, 11]])
+  })
+
+  it('keeps replies far apart in separate moments', () => {
+    expect(spans([200, 0])).toEqual([
+      [0, 0, 1],
+      [195, 200, 1],
+    ])
+  })
+
+  it('groups counts like the replies they stand for', () => {
+    const seconds = [...twoSpots, 0, 300, 301, 302]
+    const perSecond = new Map<number, number>()
+    for (const s of seconds) perSecond.set(s, (perSecond.get(s) ?? 0) + 1)
+    expect(
+      groupCountsIntoMoments(
+        [...perSecond].map(([s, count]) => ({ seconds: s, count })),
+      ),
+    ).toEqual(
+      groupIntoMoments(seconds.map(r)).map(
+        ({ startSeconds, endSeconds, replyCount }) => ({
+          startSeconds,
+          endSeconds,
+          replyCount,
+        }),
+      ),
+    )
+  })
+
+  it('lists at most 100 replies per moment, by second, but counts all', () => {
+    const replies = Array.from({ length: 150 }, (_, i) => r(10 + (i % 3)))
     const [moment] = groupIntoMoments(replies)
     expect(moment.replyCount).toBe(150)
     expect(moment.replies).toHaveLength(MAX_REPLIES_PER_MOMENT)
+    expect(moment.replies.at(-1)?.seconds).toBe(11)
   })
 
   it('returns nothing for no replies', () => {

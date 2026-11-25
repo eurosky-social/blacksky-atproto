@@ -29,6 +29,7 @@ The branch starts at Blacksky's `22656646941` (2026-11-18, merge of their #69). 
 | dataplane: push bridge skips notifications older than an hour                      | Reading a repository again (a gap fill, EUR-654) inserts its old likes and follows at their own time. They belong in the list, not in a push today. | Yes                                   |
 | bsky: network.eurosky.feed.getMoments, the moments of a video post                 | Moments in mu: a video's replies linked to a second (`network.eurosky.mediaTime`), all of them, not the 200 a thread returns.                       | No: our own lexicon                   |
 | dataplane: replies linked to a second of a video in post_media_time                | Moments read every direct reply's record: 3–6 s for a video with thousands of replies. rsky-wintermute writes the table in production.              | No: our own lexicon                   |
+| bsky: moments are where a video's linked replies pile up                           | A fixed 30-second gap joined busy moments through the chatter between them, and a moment played from its first reply, often after what happened.    | No: our own lexicon                   |
 
 Tests for our changes live in `packages/bsky/tests/eurosky/`. Each PR that changes behavior adds or updates one there.
 

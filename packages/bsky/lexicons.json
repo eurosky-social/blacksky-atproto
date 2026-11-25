@@ -1997,7 +1997,7 @@
     },
     "network.eurosky.feed.getMoments": {
       "uri": "file://../../lexicons/network/eurosky/feed/getMoments.json",
-      "cid": "bafyreicfhcf2ux53eueqtav5mdhx3nvpcpq6pkhrqiu7dvmd7t55agaouq"
+      "cid": "bafyreiavkld32vdzepmyfdhcnep5xuxeuagyfs7xplvrv6hytbjyhiwqei"
     },
     "place.stream.badge.defs": {
       "uri": "file://../../lexicons-overrides/place/stream/badge/defs.json",
