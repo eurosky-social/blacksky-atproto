@@ -30,6 +30,7 @@ The branch starts at Blacksky's `22656646941` (2026-11-18, merge of their #69). 
 | bsky: network.eurosky.feed.getMoments, the moments of a video post                 | Moments in mu: a video's replies linked to a second (`network.eurosky.mediaTime`), all of them, not the 200 a thread returns.                       | No: our own lexicon                   |
 | dataplane: replies linked to a second of a video in post_media_time                | Moments read every direct reply's record: 3–6 s for a video with thousands of replies. rsky-wintermute writes the table in production.              | No: our own lexicon                   |
 | bsky: moments are where a video's linked replies pile up                           | A fixed 30-second gap joined busy moments through the chatter between them, and a moment played from its first reply, often after what happened.    | No: our own lexicon                   |
+| bsky: getMoments says which replies the video's author answered                    | Insights in mu for a video's author: moments with comments still waiting for the author's reply.                                                    | No: our own lexicon                   |
 
 Tests for our changes live in `packages/bsky/tests/eurosky/`. Each PR that changes behavior adds or updates one there.
 

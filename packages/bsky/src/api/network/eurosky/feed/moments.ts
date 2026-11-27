@@ -28,7 +28,12 @@ const BUMP_REACH_SECONDS = 4 * MOMENT_BUMP_SECONDS
 
 export const MAX_REPLIES_PER_MOMENT = 100
 
-export type MediaTimeReply = { uri: AtUriString; seconds: number }
+export type MediaTimeReply = {
+  uri: AtUriString
+  seconds: number
+  /** The video post's author replied directly to this reply. */
+  authorReplied?: boolean
+}
 
 export type MediaTimeCount = { seconds: number; count: number }
 
@@ -40,7 +45,14 @@ export type MomentSummary = {
   replyCount: number
 }
 
-export type Moment = MomentSummary & { replies: MediaTimeReply[] }
+export type Moment = MomentSummary & {
+  replies: MediaTimeReply[]
+  /**
+   * How many of the moment's replies by others the video post's author has
+   * not replied to directly. Only when grouped with the author's DID.
+   */
+  unansweredCount?: number
+}
 
 /** A moment and the last second that belongs to it. */
 type Found = MomentSummary & { until: number }
@@ -48,9 +60,14 @@ type Found = MomentSummary & { until: number }
 /**
  * Groups replies into moments, in order of time. Each moment lists at most
  * `MAX_REPLIES_PER_MOMENT` replies, by second; `replyCount` counts all of
- * them.
+ * them. Given the video post's author (`authorDid`), each moment also counts
+ * the replies by others that the author hasn't replied to.
  */
-export function groupIntoMoments(replies: readonly MediaTimeReply[]): Moment[] {
+export function groupIntoMoments(
+  replies: readonly MediaTimeReply[],
+  { authorDid }: { authorDid?: string } = {},
+): Moment[] {
+  const byAuthor = authorDid ? `at://${authorDid}/` : undefined
   const sorted = [...replies].sort(
     (a, b) =>
       a.seconds - b.seconds || (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0),
@@ -65,13 +82,24 @@ export function groupIntoMoments(replies: readonly MediaTimeReply[]): Moment[] {
   let next = 0
   return found.map((moment) => {
     const listed: MediaTimeReply[] = []
+    let unansweredCount = 0
     while (next < sorted.length && sorted[next].seconds <= moment.until) {
+      const { uri, seconds, authorReplied } = sorted[next]
       if (listed.length < MAX_REPLIES_PER_MOMENT) {
-        listed.push({ uri: sorted[next].uri, seconds: sorted[next].seconds })
+        listed.push(
+          authorReplied ? { uri, seconds, authorReplied } : { uri, seconds },
+        )
+      }
+      if (byAuthor && !authorReplied && !uri.startsWith(byAuthor)) {
+        unansweredCount++
       }
       next++
     }
-    return { ...summaryOf(moment), replies: listed }
+    return {
+      ...summaryOf(moment),
+      ...(byAuthor ? { unansweredCount } : {}),
+      replies: listed,
+    }
   })
 }
 
