@@ -1,5 +1,6 @@
 import type { ServiceImpl } from '@connectrpc/connect'
 import { sql } from 'kysely'
+import { AtUri } from '@atproto/syntax'
 import type { Service } from '../../../proto/bsky_connect.js'
 import type { Database } from '../db/index.js'
 
@@ -24,10 +25,14 @@ export default (db: Database): Partial<ServiceImpl<typeof Service>> => ({
       .orderBy('linked.postUri')
       .limit(limit + 1)
       .execute()
+    const answered = rows.length > 0 ? await answeredByAuthor(db, postUri) : []
+    const answeredUris = new Set(answered)
     return {
-      replies: rows
-        .slice(0, limit)
-        .map((row) => ({ uri: row.uri, seconds: row.seconds })),
+      replies: rows.slice(0, limit).map((row) => ({
+        uri: row.uri,
+        seconds: row.seconds,
+        authorReplied: answeredUris.has(row.uri),
+      })),
       truncated: rows.length > limit,
     }
   },
@@ -57,6 +62,31 @@ export default (db: Database): Partial<ServiceImpl<typeof Service>> => ({
     }
   },
 })
+
+/**
+ * The linked replies to `postUri` that the post's author replied to
+ * directly. One probe of post_replyparent_idx per linked reply.
+ */
+async function answeredByAuthor(
+  db: Database,
+  postUri: string,
+): Promise<string[]> {
+  let author: string
+  try {
+    author = new AtUri(postUri).host
+  } catch {
+    return []
+  }
+  const rows = await db.db
+    .selectFrom('post_media_time as linked')
+    .innerJoin('post as answer', 'answer.replyParent', 'linked.postUri')
+    .where('linked.parentUri', '=', postUri)
+    .where('answer.creator', '=', author)
+    .select('linked.postUri as uri')
+    .distinct()
+    .execute()
+  return rows.map((row) => row.uri)
+}
 
 /**
  * Linked direct replies to `postUris`, as `linked`. Leaves out what the

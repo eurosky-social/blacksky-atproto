@@ -41,6 +41,7 @@ describe('eurosky: moments of a video post', () => {
   let video: RecordRef
   let otherPost: RecordRef
   let quietPost: RecordRef
+  let answeredVideo: RecordRef
   const uris: Record<string, string> = {}
 
   const reply = async (
@@ -118,6 +119,34 @@ describe('eurosky: moments of a video post', () => {
       undefined,
       mediaTime(41),
     )
+
+    // a video whose author, alice, answers some of its comments
+    answeredVideo = (await sc.post(alice, 'a video alice answers on')).ref
+    const onAnswered = async (
+      name: string,
+      by: DidString,
+      parent: RecordRef,
+      overrides?: Partial<AppBskyFeedPost.Record>,
+    ) => {
+      const res = await sc.reply(
+        by,
+        answeredVideo,
+        parent,
+        name,
+        undefined,
+        undefined,
+        { ...overrides },
+      )
+      uris[name] = res.ref.uriStr
+      return res.ref
+    }
+    const q10 = await onAnswered('q10', bob, answeredVideo, mediaTime(10))
+    const q12 = await onAnswered('q12', carol, answeredVideo, mediaTime(12))
+    await onAnswered('q14', dan, answeredVideo, mediaTime(14))
+    await onAnswered('own15', alice, answeredVideo, mediaTime(15))
+    await onAnswered('answer10', alice, q10)
+    const bobOn12 = await onAnswered('bobOn12', bob, q12)
+    await onAnswered('aliceUnderBob', alice, bobOn12)
     await network.processAll()
   })
 
@@ -133,6 +162,7 @@ describe('eurosky: moments of a video post', () => {
           startSeconds: 36,
           endSeconds: 50,
           replyCount: 2,
+          unansweredCount: 2,
           replies: [
             { uri: uris.at41, seconds: 41 },
             { uri: uris.at50, seconds: 50 },
@@ -142,6 +172,7 @@ describe('eurosky: moments of a video post', () => {
           startSeconds: 195,
           endSeconds: 200,
           replyCount: 1,
+          unansweredCount: 1,
           replies: [{ uri: uris.at200, seconds: 200 }],
         },
       ],
@@ -177,6 +208,26 @@ describe('eurosky: moments of a video post', () => {
     expect(res.replyCount).toBe(1)
     expect(res.moments).toEqual([
       expect.objectContaining({ startSeconds: 36, replyCount: 1 }),
+    ])
+  })
+
+  it("says which replies the video's author answered", async () => {
+    const res = await getMoments(answeredVideo.uriStr)
+    expect(res.moments).toEqual([
+      {
+        startSeconds: 5,
+        endSeconds: 15,
+        replyCount: 4,
+        // carol's 0:12 has only bob's answer, and alice's under that; dan's
+        // 0:14 has none; alice's own 0:15 isn't waiting for her
+        unansweredCount: 2,
+        replies: [
+          { uri: uris.q10, seconds: 10, authorReplied: true },
+          { uri: uris.q12, seconds: 12 },
+          { uri: uris.q14, seconds: 14 },
+          { uri: uris.own15, seconds: 15 },
+        ],
+      },
     ])
   })
 
@@ -282,8 +333,8 @@ describe('eurosky: moments of a video post', () => {
     const res = await dataplane.getMediaTimeReplies({ postUri: video.uriStr })
     // bob's 0:41 stays; carol's 0:50 and dan's 3:20 go with their accounts
     expect(res.replies).toEqual([
-      { uri: uris.at41, seconds: 41 },
-      { uri: uris.kept, seconds: 305 },
+      { uri: uris.at41, seconds: 41, authorReplied: false },
+      { uri: uris.kept, seconds: 305, authorReplied: false },
     ])
     const counts = await dataplane.getMediaTimeCounts({
       postUris: [video.uriStr],
@@ -453,5 +504,22 @@ describe('eurosky: grouping into moments', () => {
 
   it('returns nothing for no replies', () => {
     expect(groupIntoMoments([])).toEqual([])
+  })
+
+  it("counts all replies by others the author hasn't answered, given the author", () => {
+    const author = 'did:plc:author'
+    const replies = [
+      ...Array.from({ length: 150 }, (_, i) => r(10 + (i % 3))),
+      { ...r(12), authorReplied: true },
+      {
+        uri: `at://${author}/app.bsky.feed.post/own` as AtUriString,
+        seconds: 12,
+      },
+    ]
+    const [moment] = groupIntoMoments(replies, { authorDid: author })
+    expect(moment.replyCount).toBe(152)
+    // past the 100 listed ones, without the answered one and the author's own
+    expect(moment.unansweredCount).toBe(150)
+    expect(groupIntoMoments(replies)[0]).not.toHaveProperty('unansweredCount')
   })
 })

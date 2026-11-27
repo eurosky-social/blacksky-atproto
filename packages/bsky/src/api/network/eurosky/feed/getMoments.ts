@@ -1,4 +1,4 @@
-import type { AtUriString } from '@atproto/syntax'
+import { AtUri, type AtUriString } from '@atproto/syntax'
 import type { Server } from '@atproto/xrpc-server'
 import type { AppContext } from '../../../../context.js'
 import { network } from '../../../../lexicons/index.js'
@@ -28,10 +28,12 @@ export default function (server: Server, ctx: AppContext) {
       replyCount: replies.length,
       truncated: truncated || undefined,
       moments: groupIntoMoments(
-        replies.map(({ uri, seconds }) => ({
+        replies.map(({ uri, seconds, authorReplied }) => ({
           uri: uri as AtUriString,
           seconds,
+          authorReplied,
         })),
+        { authorDid: authorOf(uri) },
       ),
     }
   }
@@ -53,4 +55,14 @@ export default function (server: Server, ctx: AppContext) {
       body: { uri: params.uri, ...moments },
     }
   })
+}
+
+/** The DID a post's URI names, if it names one. */
+function authorOf(uri: string): string | undefined {
+  try {
+    const { host } = new AtUri(uri)
+    return host.startsWith('did:') ? host : undefined
+  } catch {
+    return undefined
+  }
 }

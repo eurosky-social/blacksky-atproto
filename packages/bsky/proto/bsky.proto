@@ -2633,6 +2633,8 @@ message GetMediaTimeRepliesRequest {
 message MediaTimeReply {
   string uri = 1;
   int32 seconds = 2;
+  // The parent post's author replied directly to this reply.
+  bool author_replied = 3;
 }
 
 message GetMediaTimeRepliesResponse {
